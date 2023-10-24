@@ -32,7 +32,7 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
-	uint16_t adc_val;
+
 
 /* USER CODE END PD */
 
@@ -43,6 +43,10 @@
 
 /* Private variables ---------------------------------------------------------*/
 ADC_HandleTypeDef hadc1;
+uint16_t adc_val;
+uint32_t start_tick;
+uint16_t adc_ref;
+uint8_t status_flag;
 
 UART_HandleTypeDef huart1;
 
@@ -103,6 +107,7 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
+
 
     /* USER CODE BEGIN 3 */
 
@@ -298,22 +303,48 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 
 void HAL_GPIO_EXTI_Callback(uint16_t RSW){
-
+	start_tick = HAL_GetTick();
 	HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
+	HAL_GPIO_WritePin(IRLED_GPIO_Port, IRLED_Pin, GPIO_PIN_SET);
+
+	while (1){
+		if ((HAL_GetTick() - start_tick) >= 300){
+			break;
+		}
+	}
+
+	HAL_ADC_Start(&hadc1);
+	 	if(HAL_ADC_PollForConversion(&hadc1,10) == HAL_OK){
+			adc_ref = HAL_ADC_GetValue(&hadc1);
+			adc_ref += THRESHOLD;
+	 	}
 
 	while (HAL_GPIO_ReadPin(RSW_GPIO_Port, RSW_Pin) == GPIO_PIN_SET){
-		HAL_GPIO_WritePin(IRLED_GPIO_Port, IRLED_Pin, GPIO_PIN_SET);
 
 		// Get ADC Value
 		HAL_ADC_Start(&hadc1);
-		HAL_ADC_PollForConversion(&hadc1, HAL_MAX_DELAY);
+ 		if(HAL_ADC_PollForConversion(&hadc1,10) == HAL_OK){
 		adc_val = HAL_ADC_GetValue(&hadc1);
+		}
+		HAL_ADC_Stop(&hadc1);
+
+		if (adc_val > adc_ref){
+			status_flag = 1;
+		}
+
 	}
 
 	HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
 	HAL_GPIO_WritePin(IRLED_GPIO_Port, IRLED_Pin, GPIO_PIN_RESET);
 
+	if (status_flag != 1){
+		HAL_UART_Transmit(&huart1, message1, sizeof(message1) - 1, HAL_MAX_DELAY);
+	}
+	else{
+		HAL_UART_Transmit(&huart1, message2, sizeof(message2) - 1, HAL_MAX_DELAY);
+	}
 
+	// wait for uart to finish
 
 }
 

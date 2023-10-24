@@ -31,6 +31,7 @@ extern "C" {
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "stdbool.h"
 
 /* USER CODE END Includes */
 
@@ -72,6 +73,7 @@ void Error_Handler(void);
 #define RX_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
+#define THRESHOLD 50
 
 /* USER CODE END Private defines */
 
