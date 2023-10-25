@@ -48,17 +48,21 @@ UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN PV */
 
-uint16_t adc_val;
-uint32_t start_tick;
-uint16_t adc_ref;
-uint8_t	tflag;
-uint8_t status_flag;
+volatile 	uint16_t 	adc_val = 0;
+			uint32_t 	start_tick;
+volatile 	uint16_t 	adc_ref = 0;
+			uint8_t		tflag = 0;
+volatile 	uint8_t 	status_flag = 0;
+volatile 	uint8_t 	Processflag = 0;
 
 //Messages
+uint8_t message5[] = "AT+LOWPOWER";
 uint8_t message4[] = "AT+MSG=\"PeekaBoo!!!\"";
 uint8_t message3[] = "AT+MSG=\"You got mail!\"";
 uint8_t message2[] = "AT+JOIN";
 uint8_t message1[] = "A";
+uint8_t tx_buffer[128];
+uint8_t tx_flag = 0;
 
 /* USER CODE END PV */
 
@@ -68,6 +72,7 @@ static void MX_GPIO_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_USART1_UART_Init(void);
 /* USER CODE BEGIN PFP */
+void ProcessInterrupt();
 
 /* USER CODE END PFP */
 
@@ -89,7 +94,7 @@ int main(void)
   /* MCU Configuration--------------------------------------------------------*/
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-  HAL_Init();
+   HAL_Init();
 
   /* USER CODE BEGIN Init */
 
@@ -114,8 +119,27 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  HAL_SuspendTick(); // Suspending timer interrupt to not wake mcu from sleepmode
-	  HAL_PWR_EnterSLEEPMode(PWR_MAINREGULATOR_ON, PWR_SLEEPENTRY_WFI);
+
+	 HAL_UART_Transmit(&huart1, message5, sizeof(message5) - 1, HAL_MAX_DELAY);
+	 HAL_SuspendTick(); // Suspending timer interrupt to not wake mcu from sleepmode
+	 HAL_PWR_EnterSLEEPMode(PWR_MAINREGULATOR_ON, PWR_SLEEPENTRY_WFI);
+
+	 if (Processflag){
+ 		 ProcessInterrupt();
+		 HAL_UART_Transmit(&huart1, message2, sizeof(message2) - 1, HAL_MAX_DELAY); //Join TTN
+		 HAL_Delay(9000);
+		 	 if (status_flag == 1){
+		 		 HAL_UART_Transmit(&huart1, message3, sizeof(message3) - 1, HAL_MAX_DELAY);
+		 	 }else{
+		 		 HAL_UART_Transmit(&huart1, message4, sizeof(message4) - 1, HAL_MAX_DELAY);
+		 	 }
+		 	HAL_Delay(100);
+		 status_flag=0;
+		 Processflag=0;
+	 }
+
+
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -201,11 +225,11 @@ static void MX_ADC1_Init(void)
   hadc1.Init.ScanConvMode = ADC_SCAN_DISABLE;
   hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
   hadc1.Init.LowPowerAutoWait = DISABLE;
-  hadc1.Init.ContinuousConvMode = ENABLE;
+  hadc1.Init.ContinuousConvMode = DISABLE;
   hadc1.Init.NbrOfConversion = 1;
   hadc1.Init.DiscontinuousConvMode = DISABLE;
-  hadc1.Init.ExternalTrigConv = ADC_EXTERNALTRIG_T2_TRGO;
-  hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_RISING;
+  hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
+  hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
   hadc1.Init.DMAContinuousRequests = DISABLE;
   hadc1.Init.Overrun = ADC_OVR_DATA_PRESERVED;
   hadc1.Init.OversamplingMode = DISABLE;
@@ -283,15 +307,12 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(IRLED_GPIO_Port, IRLED_Pin, GPIO_PIN_SET);
-
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, IRLED_Pin|LED_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pins : IRLED_Pin LED_Pin */
   GPIO_InitStruct.Pin = IRLED_Pin|LED_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
@@ -310,33 +331,40 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+void ProcessInterrupt(){
 
-void HAL_GPIO_EXTI_Callback(uint16_t RSW){
 	HAL_ResumeTick(); 					//Resume tick after wake up
-	start_tick = HAL_GetTick(); 		//Get tick for delay
+	//start_tick = HAL_GetTick(); 		//Get tick for delay
 	HAL_UART_Transmit(&huart1, message1, sizeof(message1) - 1, HAL_MAX_DELAY); // Wake up E5
-
 	HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
 	HAL_GPIO_WritePin(IRLED_GPIO_Port, IRLED_Pin, GPIO_PIN_SET);
-	HAL_UART_Transmit(&huart1, message2, sizeof(message1) - 1, HAL_MAX_DELAY);
 
 	//300ms to let daylight in
-	while ((HAL_GetTick() - start_tick) < 300){}
+	//while ((HAL_GetTick() - start_tick) <= 300){
 
-	HAL_ADC_Start(&hadc1);
-	 	if(HAL_ADC_PollForConversion(&hadc1,10) == HAL_OK){
-			adc_ref = HAL_ADC_GetValue(&hadc1);
-			adc_ref += THRESHOLD;
-	 	}
+	//}
 
 	while (HAL_GPIO_ReadPin(RSW_GPIO_Port, RSW_Pin) == GPIO_PIN_SET){
 
 		// Get ADC Value
-		HAL_ADC_Start(&hadc1);
- 		if(HAL_ADC_PollForConversion(&hadc1,10) == HAL_OK){
-		adc_val = HAL_ADC_GetValue(&hadc1);
+		if ((HAL_ADC_Start(&hadc1) == HAL_OK) && (tflag==0)){
+
+				if (HAL_ADC_PollForConversion(&hadc1, 20) == HAL_OK){
+
+				adc_ref = HAL_ADC_GetValue(&hadc1);
+				adc_ref += THRESHOLD;
+				tflag=1;
+				HAL_ADC_Stop(&hadc1);
+			}
 		}
-		HAL_ADC_Stop(&hadc1);
+
+		if(HAL_ADC_Start(&hadc1) == HAL_OK){
+
+			if (HAL_ADC_PollForConversion(&hadc1, 20) == HAL_OK){
+				adc_val = HAL_ADC_GetValue(&hadc1);
+				HAL_ADC_Stop(&hadc1);
+			}
+		}
 
 		if (adc_val > adc_ref){
 			status_flag = 1;
@@ -347,17 +375,12 @@ void HAL_GPIO_EXTI_Callback(uint16_t RSW){
 	HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
 	HAL_GPIO_WritePin(IRLED_GPIO_Port, IRLED_Pin, GPIO_PIN_RESET);
 
-	if (status_flag != 1){
-		HAL_UART_Transmit(&huart1, message1, sizeof(message1) - 1, HAL_MAX_DELAY);
-	}
-	else{
-		HAL_UART_Transmit(&huart1, message2, sizeof(message2) - 1, HAL_MAX_DELAY);
-	}
+	tflag=0;
 
-	// wait for uart to finish
+}
 
-	// Send sleep command for E5 mini "AT+LOWPOWER\r\n"
-
+void HAL_GPIO_EXTI_Callback(uint16_t RSW){
+	Processflag=1;
 }
 
 /* USER CODE END 4 */
