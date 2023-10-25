@@ -66,7 +66,7 @@ void Error_Handler(void);
 #define LED_GPIO_Port GPIOA
 #define TX_Pin GPIO_PIN_9
 #define TX_GPIO_Port GPIOA
-#define RSW_Pin GPIO_PIN_10
+#define RSW_Pin GPIO_PIN_12
 #define RSW_GPIO_Port GPIOA
 #define RSW_EXTI_IRQn EXTI15_10_IRQn
 #define RX_Pin GPIO_PIN_7

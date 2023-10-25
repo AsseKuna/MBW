@@ -43,14 +43,22 @@
 
 /* Private variables ---------------------------------------------------------*/
 ADC_HandleTypeDef hadc1;
-uint16_t adc_val;
-uint32_t start_tick;
-uint16_t adc_ref;
-uint8_t status_flag;
 
 UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN PV */
+
+uint16_t adc_val;
+uint32_t start_tick;
+uint16_t adc_ref;
+uint8_t	tflag;
+uint8_t status_flag;
+
+//Messages
+uint8_t message4[] = "AT+MSG=\"PeekaBoo!!!\"";
+uint8_t message3[] = "AT+MSG=\"You got mail!\"";
+uint8_t message2[] = "AT+JOIN";
+uint8_t message1[] = "A";
 
 /* USER CODE END PV */
 
@@ -106,8 +114,9 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+	  HAL_SuspendTick(); // Suspending timer interrupt to not wake mcu from sleepmode
+	  HAL_PWR_EnterSLEEPMode(PWR_MAINREGULATOR_ON, PWR_SLEEPENTRY_WFI);
     /* USER CODE END WHILE */
-
 
     /* USER CODE BEGIN 3 */
 
@@ -195,8 +204,8 @@ static void MX_ADC1_Init(void)
   hadc1.Init.ContinuousConvMode = ENABLE;
   hadc1.Init.NbrOfConversion = 1;
   hadc1.Init.DiscontinuousConvMode = DISABLE;
-  hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
-  hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
+  hadc1.Init.ExternalTrigConv = ADC_EXTERNALTRIG_T2_TRGO;
+  hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_RISING;
   hadc1.Init.DMAContinuousRequests = DISABLE;
   hadc1.Init.Overrun = ADC_OVR_DATA_PRESERVED;
   hadc1.Init.OversamplingMode = DISABLE;
@@ -303,15 +312,16 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 
 void HAL_GPIO_EXTI_Callback(uint16_t RSW){
-	start_tick = HAL_GetTick();
+	HAL_ResumeTick(); 					//Resume tick after wake up
+	start_tick = HAL_GetTick(); 		//Get tick for delay
+	HAL_UART_Transmit(&huart1, message1, sizeof(message1) - 1, HAL_MAX_DELAY); // Wake up E5
+
 	HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
 	HAL_GPIO_WritePin(IRLED_GPIO_Port, IRLED_Pin, GPIO_PIN_SET);
+	HAL_UART_Transmit(&huart1, message2, sizeof(message1) - 1, HAL_MAX_DELAY);
 
-	while (1){
-		if ((HAL_GetTick() - start_tick) >= 300){
-			break;
-		}
-	}
+	//300ms to let daylight in
+	while ((HAL_GetTick() - start_tick) < 300){}
 
 	HAL_ADC_Start(&hadc1);
 	 	if(HAL_ADC_PollForConversion(&hadc1,10) == HAL_OK){
@@ -345,6 +355,8 @@ void HAL_GPIO_EXTI_Callback(uint16_t RSW){
 	}
 
 	// wait for uart to finish
+
+	// Send sleep command for E5 mini "AT+LOWPOWER\r\n"
 
 }
 
